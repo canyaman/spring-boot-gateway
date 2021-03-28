@@ -1,0 +1,211 @@
+plugins {
+	id "idea"
+	id 'java'
+	// Spring Boot
+	id 'org.springframework.boot' version "${springBootVersion}"
+	id 'io.spring.dependency-management' version "${springDependencyVersion}"
+	// Kotlin Language
+	id "org.jetbrains.kotlin.jvm" version "${kotlinVersion}"
+	id "org.jetbrains.kotlin.plugin.spring" version "${kotlinVersion}"
+	// Git
+	id "com.gorylenko.gradle-git-properties" version "${gitGradleVersion}"
+	// Docker
+	id "com.google.cloud.tools.jib" version "${jibVersion}"
+	// OpenApi
+	id "org.openapi.generator" version "${openApiGeneratorVersion}"
+	// Asciidoc
+	id "org.asciidoctor.jvm.convert" version "${asciidoctorVersion}"
+}
+apply from: 'version.gradle'
+
+group = "$projectGroup"
+version = "$projectVersion"
+sourceCompatibility = '11'
+
+configurations {
+	formattingOnly
+	runtimeClasspath {
+		extendsFrom developmentOnly
+	}
+}
+
+compileKotlin {
+	kotlinOptions {
+		freeCompilerArgs = ["-Xjsr305=strict"]
+		jvmTarget = "11"
+	}
+}
+
+compileTestKotlin {
+	kotlinOptions {
+		freeCompilerArgs = ["-Xjsr305=strict"]
+		jvmTarget = "11"
+	}
+}
+
+repositories {
+	mavenCentral()
+	maven { url 'https://repo.spring.io/release' }
+	maven { url 'https://repo.spring.io/milestone' }
+	maven { url 'https://repo.spring.io/snapshot' }
+}
+
+dependencies {
+	implementation platform("org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}")
+
+	// Spring Boot
+	implementation('org.springframework.boot:spring-boot-starter-actuator')
+	implementation('org.springframework.boot:spring-boot-starter-webflux')
+	implementation('org.springframework.boot:spring-boot-starter-validation')
+
+	// Spring Cloud
+    implementation('org.springframework.cloud:spring-cloud-starter-gateway')
+    implementation('org.springframework.cloud:spring-cloud-starter-sleuth')
+
+	// Kotlin
+	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+	implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
+	implementation("org.jetbrains.kotlin:kotlin-reflect")
+	implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
+
+	// Swagger support
+	implementation("org.springdoc:springdoc-openapi-webflux-core:${springdocVersion}")
+	implementation("org.springdoc:springdoc-openapi-webflux-ui:${springdocVersion}")
+	implementation("org.springdoc:springdoc-openapi-kotlin:${springdocVersion}")
+
+	// LiveReload
+	developmentOnly('org.springframework.boot:spring-boot-devtools')
+
+	// Configuration Processor
+	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+
+	// Test
+	testImplementation('org.springframework.boot:spring-boot-starter-test')
+	testImplementation('io.projectreactor:reactor-test')
+
+	// Lint
+	formattingOnly("com.pinterest:ktlint:${ktlintVersion}")
+}
+
+springBoot {
+	// This statement tells the Gradle Spring Boot plugin
+	// to generate a file
+	// build/resources/main/META-INF/build-info.properties
+	// that is picked up by Spring Boot to display
+	// via /actuator/info endpoint.
+	// via /system/info endpoint.
+	buildInfo {
+		properties {
+			additional = [
+					build                : System.properties['BUILD'] ?: '0',
+					basePackage          : projectBasePackage,
+					by                   : System.properties['user.name'],
+					operatingSystem      : "${System.properties['os.name']} (${System.properties['os.version']})",
+					continuousIntegration: System.getenv('CI') ? true : false,
+					machine              : InetAddress.localHost.hostName
+			]
+		}
+	}
+}
+
+test {
+	useJUnitPlatform{
+		excludeTags 'open-api'
+	}
+}
+
+task openApiTest(type: Test) {
+	useJUnitPlatform {
+		includeTags 'open-api'
+	}
+}
+
+task ktlint(type: JavaExec, group: "verification") {
+	description = "Check Kotlin code style."
+	classpath = configurations.formattingOnly
+	main = "com.pinterest.ktlint.Main"
+	args "src/**/*.kt"
+}
+check.dependsOn ktlint
+
+task ktlintFormat(type: JavaExec, group: "formatting") {
+	description = "Fix Kotlin code style deviations."
+	classpath = configurations.formattingOnly
+	main = "com.pinterest.ktlint.Main"
+	args "-F", "src/**/*.kt"
+}
+
+jib {
+	from {
+		image = 'gcr.io/distroless/java:11'
+	}
+	to {
+		image = "$projectName"
+	}
+	container {
+		ports = ['8080','9090']
+	}
+	allowInsecureRegistries = true
+}
+
+task openApiAsciidoc(type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask){
+	//dependsOn openApiTest
+	generatorName = "asciidoc"
+	outputDir = "$buildDir/asciidoc".toString()
+	inputSpec = "$rootDir/src/main/resources/api-docs/${projectName}.yml".toString()
+	// internal-generation
+	additionalProperties = [
+			//useIntroduction: "true",
+			infoEmail: "can+info@yaman.me",
+			infoUrl: "can.yaman.me",
+			appName: "Spring Boot App",
+			artifactId: "$projectGroup.$projectName",
+			artifactVersion: projectVersion,
+			specDir: "$buildDir/asciidoc/spec/",
+			snippetDir: "$buildDir/asciidoc/snippet/"
+	]
+}
+
+
+openApiAsciidoc.doFirst(){
+	copy {
+		from "$projectDir/src/docs/spec/"
+		into "$buildDir/asciidoc/spec"
+	}
+	copy {
+		from "$projectDir/src/docs/snippet/"
+		into "$buildDir/asciidoc/snippet"
+	}
+}
+
+asciidoctor {
+	dependsOn openApiAsciidoc
+	sourceDir "src/docs/asciidoc"
+	attributes = [
+			doctype: 'book',
+			toc: 'left',
+			toclevels: '3',
+			numbered: '',
+			sectlinks: '',
+			sectanchors: '',
+			hardbreaks: '',
+			openApiDir: "${buildDir}/asciidoc",
+			sourceDir: "src/docs/spec",
+			specDir: "spec/",
+			snippetDir: "snippet/"
+	]
+	outputDir file("${buildDir}/docs")
+	doLast {
+		copy {
+			from "${buildDir}/asciidoc/snippet"
+			into "$buildDir/resources/main/asciidoc"
+		}
+		copy {
+			from "${outputDir}"
+			into "$buildDir/resources/main/asciidoc"
+		}
+	}
+}
+
+processResources.dependsOn(asciidoctor)

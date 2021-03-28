@@ -1,0 +1,4 @@
+ext.projectName = 'spring-boot-gateway'
+ext.projectGroup = 'me.yaman.can'
+ext.projectBasePackage = 'me.yaman.can.demo'
+ext.projectVersion = '0.0.1-SNAPSHOT'

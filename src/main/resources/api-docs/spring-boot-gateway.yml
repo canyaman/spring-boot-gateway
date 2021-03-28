@@ -1,0 +1,7 @@
+openapi: 3.0.1
+info: {title: spring-boot-gateway, description: Spring boot application auto generated
+    OpenApi doc., version: 0.0.1-SNAPSHOT}
+servers:
+- {url: 'http://spring-boot-gateway:80', description: Generated server url}
+paths: {}
+components: {}

@@ -1,0 +1,1 @@
+SimpleModel delete function implementation details.

@@ -1,0 +1,70 @@
+spring:
+  profiles.group.local: proxy
+  #profiles.group.container:
+  profiles.active: local
+  application.name: spring-boot-gateway
+  jackson:
+    timeZone: Europe/Istanbul
+# Server
+server:
+  port: 8080
+  forwardHeadersStrategy: NATIVE
+# Logging
+logging:
+  level:
+    me.yaman.can: INFO
+
+# Swagger Config
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+---
+spring.config.activate.onCloudPlatform: kubernetes
+
+# Actuator Service
+management:
+  server.port: 9090
+  endpoint.health:
+    showDetails: never
+  endpoints:
+    web:
+      exposure.include: info, health, prometheus
+    health.sensitive: false
+  metrics.tags.application: ${spring.application.name}
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState, diskSpace, ping
+---
+spring.profiles: proxy
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: openapi
+          uri: http://localhost:${server.port}
+          predicates:
+            - Path=/v3/api-docs/**
+          filters:
+            - PreserveHostHeader
+            - RewritePath=/v3/api-docs/(?<path>.*), /$\{path}/v3/api-docs
+        - id: httpbin_proxy
+          metadata:
+            context-path: httpbin
+          uri: http://httpbin.org:80
+          predicates:
+            - Path=/httpbin/**
+          filters:
+            - RewritePath=/httpbin/(?<segment>.*), /$\{segment}
+        - id: spring-boot-app
+          metadata:
+            context-path: spring-boot
+          uri: http://spring-boot-app:80
+          predicates:
+            - Path=/spring-boot/**
+          filters:
+            - RewritePath=/spring-boot/(?<segment>.*), /$\{segment}
+---

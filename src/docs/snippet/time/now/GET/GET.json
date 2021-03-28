@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPattern": "/time/now"
+  },
+  "response": {
+    "status": 200,
+    "headers" : {
+      "Content-Type" : "application/json"
+    },
+    "jsonBody": {
+      "now": "2021-02-20T20:55:17.508902Z"
+    }
+  }
+}
